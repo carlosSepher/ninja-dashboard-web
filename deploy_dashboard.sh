@@ -8,7 +8,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 BRANCH="${1:-main}"
-REPO_URL="git@github.com:carlosSepher/ninja-dashboard-web.git"
+REPO_URL="https://github.com/carlosSepher/ninja-dashboard-web.git"
 DEPLOY_ROOT="/opt/ninja-dashboard-web"
 REPO_DIR="$DEPLOY_ROOT/repo"
 ENV_FILE="$REPO_DIR/.env.prod"
