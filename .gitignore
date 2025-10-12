@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 ninja-executive-api/
+ninja-dashboard-clean/
 nousar.env.prod
 promp.txt
 schema.sql
