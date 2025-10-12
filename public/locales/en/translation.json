@@ -1,0 +1,42 @@
+{
+  "filters": {
+    "title": "Filters",
+    "dateRange": "Date range",
+    "company": "Company",
+    "psp": "PSP",
+    "status": "Status",
+    "apply": "Apply",
+    "reset": "Reset"
+  },
+  "layout": {
+    "overview": "Overview",
+    "transactions": "Transactions",
+    "health": "Service health",
+    "export": "Export",
+    "theme": "Toggle theme"
+  },
+  "kpis": {
+    "totalPayments": "Total payments",
+    "totalAmount": "Total amount",
+    "activeCompanies": "Active companies",
+    "successRate": "Success rate",
+    "topPsp": "Top PSP"
+  },
+  "tables": {
+    "payments": "Payments"
+  },
+  "status": {
+    "ok": "Operational",
+    "degraded": "Degraded",
+    "down": "Down"
+  },
+  "actions": {
+    "retry": "Retry"
+  },
+  "errors": {
+    "generic": "Something went wrong"
+  },
+  "empty": {
+    "noData": "No data to display"
+  }
+}

@@ -1,0 +1,461 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  DASHBOARD_DATA_REFRESH_ENABLED,
+  DASHBOARD_DATA_REFRESH_INTERVAL_MS,
+  DASHBOARD_HEALTH_REFRESH_ENABLED,
+  DASHBOARD_HEALTH_REFRESH_INTERVAL_MS,
+} from "@/lib/constants";
+import { logError, logInfo } from "@/lib/logger";
+import { apiClient } from "@/services/apiClient";
+import { useDashboardStore } from "@/store";
+import type { Payment, ProviderType, StreamEvent, TimeseriesPoint } from "@/store/types/dashboard";
+
+const DEFAULT_PROVIDERS: ProviderType[] = ["webpay", "stripe", "paypal"];
+const DEFAULT_CURRENCIES = ["CLP", "USD"] as const;
+
+export const useDashboardData = () => {
+  const filters = useDashboardStore((state) => state.filters);
+  const metrics = useDashboardStore((state) => state.metrics);
+  const health = useDashboardStore((state) => state.health);
+  const setMetrics = useDashboardStore((state) => state.setMetrics);
+  const setHealth = useDashboardStore((state) => state.setHealth);
+  const pushEvent = useDashboardStore((state) => state.pushEvent);
+  const setStream = useDashboardStore((state) => state.setStream);
+
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [totalPayments, setTotalPayments] = useState(0);
+  const deliveredEventsRef = useRef<Set<string>>(new Set());
+
+  const loadMetrics = useCallback(async () => {
+    try {
+      setMetrics({ loading: true, error: null });
+      const data = await apiClient.getMetrics({
+        from: filters.dateRange.from,
+        to: filters.dateRange.to,
+      });
+      setMetrics({ data, loading: false, error: null });
+      logInfo("metrics refresh", { totalPayments: data.totalPayments });
+    } catch (error) {
+      const message = (error as Error).message;
+      setMetrics({ loading: false, error: message });
+      logError("metrics fetch failed", error);
+    }
+  }, [filters.dateRange.from, filters.dateRange.to, setMetrics]);
+
+  const loadHealth = useCallback(async () => {
+    try {
+      setHealth({ loading: true, error: null });
+      const data = await apiClient.getServicesHealth();
+      setHealth({ services: data, loading: false, error: null });
+      logInfo("health refresh", { services: data.map((item) => item.id) });
+    } catch (error) {
+      const message = (error as Error).message;
+      setHealth({ loading: false, error: message });
+      logError("health fetch failed", error);
+    }
+  }, [setHealth]);
+
+  const loadPayments = useCallback(async () => {
+    try {
+      setPaymentsLoading(true);
+      setPaymentsError(null);
+      const response = await apiClient.getPayments({
+        from: filters.dateRange.from,
+        to: filters.dateRange.to,
+        provider: filters.provider === "all" ? undefined : filters.provider,
+        status: filters.status === "all" ? undefined : filters.status,
+        environment: filters.environment === "all" ? undefined : filters.environment,
+        buyOrder: filters.buyOrder.trim() ? filters.buyOrder.trim() : undefined,
+        page,
+        pageSize,
+      });
+      const normalizedBuyOrder = filters.buyOrder.trim().toLowerCase();
+      const filteredItems = normalizedBuyOrder
+        ? response.items.filter((item) =>
+            item.buyOrder?.toLowerCase().includes(normalizedBuyOrder),
+          )
+        : response.items;
+
+      setPayments(filteredItems);
+      setTotalPayments(normalizedBuyOrder ? filteredItems.length : response.count);
+      logInfo("payments refresh", { page, pageSize, total: response.count });
+    } catch (error) {
+      const message = (error as Error).message;
+      setPaymentsError(message);
+      logError("payments fetch failed", error);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }, [filters.buyOrder, filters.dateRange.from, filters.dateRange.to, filters.environment, filters.provider, filters.status, page, pageSize]);
+
+  useEffect(() => {
+    loadMetrics();
+    loadHealth();
+
+    const dataInterval = DASHBOARD_DATA_REFRESH_ENABLED
+      ? window.setInterval(loadMetrics, DASHBOARD_DATA_REFRESH_INTERVAL_MS)
+      : null;
+
+    const healthInterval = DASHBOARD_HEALTH_REFRESH_ENABLED
+      ? window.setInterval(loadHealth, DASHBOARD_HEALTH_REFRESH_INTERVAL_MS)
+      : null;
+
+    return () => {
+      if (dataInterval) {
+        window.clearInterval(dataInterval);
+      }
+      if (healthInterval) {
+        window.clearInterval(healthInterval);
+      }
+    };
+  }, [loadMetrics, loadHealth]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.provider,
+    filters.status,
+    filters.environment,
+    filters.buyOrder,
+  ]);
+
+  useEffect(() => {
+    loadPayments();
+  }, [loadPayments]);
+
+  const reload = useCallback(() => {
+    loadMetrics();
+    loadHealth();
+    loadPayments();
+  }, [loadMetrics, loadHealth, loadPayments]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchEvents = async () => {
+      try {
+        const events = await apiClient.getLatestEvents();
+        if (!isMounted) return;
+        events.forEach((event: StreamEvent) => {
+          const registry = deliveredEventsRef.current;
+          if (!registry.has(event.id)) {
+            registry.add(event.id);
+            if (registry.size > 200) {
+              const first = registry.values().next().value as string | undefined;
+              if (first) {
+                registry.delete(first);
+              }
+            }
+            pushEvent(event);
+          }
+        });
+        setStream({ connected: true, lastError: null });
+      } catch (error) {
+        if (!isMounted) return;
+        const message = (error as Error).message;
+        logError("latest events fetch failed", error);
+        setStream({ connected: false, lastError: message });
+      }
+    };
+
+    fetchEvents();
+
+    return () => {
+      isMounted = false;
+      setStream({ connected: false });
+    };
+  }, [pushEvent, setStream]);
+
+  const derivedStatusCounts = useMemo(() => {
+    const metricsCounts = metrics.data?.statusCounts;
+    if (metricsCounts && Object.keys(metricsCounts).length > 0) {
+      return metricsCounts;
+    }
+    return payments.reduce<Record<string, number>>((acc, payment) => {
+      acc[payment.status] = (acc[payment.status] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [metrics.data?.statusCounts, payments]);
+
+  const derivedProviderCounts = useMemo(() => {
+    let baseCounts: Record<string, number> = {};
+
+    if (payments.length > 0) {
+      baseCounts = payments.reduce<Record<string, number>>((acc, payment) => {
+        acc[payment.provider] = (acc[payment.provider] ?? 0) + 1;
+        return acc;
+      }, {});
+    } else if (metrics.data?.providerCounts && Object.keys(metrics.data.providerCounts).length > 0) {
+      baseCounts = { ...metrics.data.providerCounts };
+    }
+
+    if (Object.keys(baseCounts).length === 0) {
+      DEFAULT_PROVIDERS.forEach((provider) => {
+        baseCounts[provider] = 0;
+      });
+    }
+
+    return baseCounts;
+  }, [metrics.data?.providerCounts, payments]);
+
+  const providerAmounts = useMemo(() => {
+    let baseAmounts: Record<string, number> = {};
+
+    if (payments.length > 0) {
+      baseAmounts = payments.reduce<Record<string, number>>((acc, payment) => {
+        acc[payment.provider] = (acc[payment.provider] ?? 0) + payment.amountMinor;
+        return acc;
+      }, {});
+    } else if (metrics.data?.pspDistribution && metrics.data.pspDistribution.length > 0) {
+      baseAmounts = metrics.data.pspDistribution.reduce<Record<string, number>>((acc, item) => {
+        acc[item.provider] = item.totalAmountMinor;
+        return acc;
+      }, {});
+    }
+
+    if (Object.keys(baseAmounts).length === 0) {
+      DEFAULT_PROVIDERS.forEach((provider) => {
+        baseAmounts[provider] = 0;
+      });
+    }
+
+    return baseAmounts;
+  }, [metrics.data?.pspDistribution, payments]);
+
+  const providerPaymentDetails = useMemo(() => {
+    return payments.reduce<Record<string, { id: string; amountMinor: number; currency: string }[]>>((acc, payment) => {
+      if (!acc[payment.provider]) {
+        acc[payment.provider] = [];
+      }
+
+      const mappedPayment = {
+        id: String(payment.id),
+        amountMinor: payment.amountMinor,
+        currency: payment.currency,
+      };
+
+      acc[payment.provider].push(mappedPayment);
+      return acc;
+    }, {});
+  }, [payments]);
+
+  const totalsByCurrency = useMemo(() => {
+    let entries: { currency: string; amountMinor: number; providers?: Record<string, number> }[] = [];
+
+    if (payments.length > 0) {
+      const aggregates = payments.reduce<
+        Record<
+          string,
+          {
+            amountMinor: number;
+            providers: Record<string, number>;
+          }
+        >
+      >((acc, payment) => {
+        const normalizedCurrency = payment.currency.toUpperCase();
+        if (!acc[normalizedCurrency]) {
+          acc[normalizedCurrency] = { amountMinor: 0, providers: {} };
+        }
+        acc[normalizedCurrency].amountMinor += payment.amountMinor;
+        acc[normalizedCurrency].providers[payment.provider] =
+          (acc[normalizedCurrency].providers[payment.provider] ?? 0) + payment.amountMinor;
+        return acc;
+      }, {});
+
+      entries = Object.entries(aggregates).map(([currency, entry]) => ({
+        currency,
+        amountMinor: entry.amountMinor,
+        providers: entry.providers,
+      }));
+    } else {
+      const currencyTotals = metrics.data?.totalsByCurrency ?? [];
+      const fallbackCurrency = metrics.data?.totalAmountCurrency;
+      const aggregatedFallback = currencyTotals.length
+        ? currencyTotals
+        : fallbackCurrency
+          ? [
+              {
+                currency: fallbackCurrency,
+                amountMinor: metrics.data?.totalAmountMinor ?? 0,
+              },
+            ]
+          : [];
+
+      const sanitized = aggregatedFallback
+        .map((entry) => ({
+          currency: entry.currency?.toUpperCase?.() ?? entry.currency,
+          amountMinor: entry.amountMinor,
+        }))
+        .filter((entry): entry is { currency: string; amountMinor: number } =>
+          Boolean(entry.currency) && entry.currency !== "MIXED",
+        );
+
+      const distribution = metrics.data?.pspDistribution ?? [];
+
+      entries = sanitized.map((entry) => {
+        const providers = distribution
+          .filter((item) => {
+            const currency =
+              item.currency?.toUpperCase?.() ?? metrics.data?.totalAmountCurrency?.toUpperCase() ?? entry.currency;
+            return currency === entry.currency;
+          })
+          .reduce<Record<string, number>>((acc, item) => {
+            acc[item.provider] = (acc[item.provider] ?? 0) + item.totalAmountMinor;
+            return acc;
+          }, {});
+
+        return {
+          currency: entry.currency,
+          amountMinor: entry.amountMinor,
+          providers: Object.keys(providers).length > 0 ? providers : undefined,
+        };
+      });
+    }
+
+    if (entries.length === 0) {
+      entries = DEFAULT_CURRENCIES.map((currency) => ({
+        currency,
+        amountMinor: 0,
+        providers: undefined,
+      }));
+    }
+
+    return entries;
+  }, [
+    payments,
+    metrics.data?.totalsByCurrency,
+    metrics.data?.totalAmountCurrency,
+    metrics.data?.totalAmountMinor,
+    metrics.data?.pspDistribution,
+  ]);
+
+  const fallbackTimeseries = useMemo(() => {
+    if (payments.length === 0) return [] as TimeseriesPoint[];
+
+    const grouped = new Map<
+      string,
+      {
+        count: number;
+        amountMinor: number;
+        success: number;
+        currency: string;
+        providers: Map<string, { total: number; authorized: number }>;
+      }
+    >();
+
+    payments.forEach((payment) => {
+      const bucket = new Date(payment.createdAt);
+      bucket.setMinutes(0, 0, 0);
+      const key = bucket.toISOString();
+      const entry =
+        grouped.get(key) ??
+        {
+          count: 0,
+          amountMinor: 0,
+          success: 0,
+          currency: payment.currency,
+          providers: new Map<string, { total: number; authorized: number }>(),
+        };
+
+      entry.count += 1;
+      entry.amountMinor += payment.amountMinor;
+      if (payment.status === "AUTHORIZED") {
+        entry.success += 1;
+      }
+      entry.currency = payment.currency;
+
+      const providerEntry = entry.providers.get(payment.provider) ?? { total: 0, authorized: 0 };
+      providerEntry.total += 1;
+      if (payment.status === "AUTHORIZED") {
+        providerEntry.authorized += 1;
+      }
+      entry.providers.set(payment.provider, providerEntry);
+
+      grouped.set(key, entry);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => (a > b ? 1 : -1))
+      .map(([timestamp, stats]) => ({
+        timestamp,
+        count: stats.count,
+        amountMinor: stats.amountMinor,
+        successRate: stats.count ? (stats.success / stats.count) * 100 : 0,
+        currency: stats.currency,
+        providers: Object.fromEntries(
+          Array.from(stats.providers.entries()).map(([provider, providerStats]) => [
+            provider,
+            {
+              total: providerStats.total,
+              authorized: providerStats.authorized,
+              successRate:
+                providerStats.total > 0
+                  ? (providerStats.authorized / providerStats.total) * 100
+                  : 0,
+            },
+          ]),
+        ),
+      }));
+  }, [payments]);
+
+  const timeseriesWithProviders = useMemo(() => {
+    const metricsTimeseries = metrics.data?.timeseries ?? [];
+    const hasProviderBreakdown = metricsTimeseries.some(
+      (point) => point.providers && Object.keys(point.providers).length > 0,
+    );
+
+    if (hasProviderBreakdown) {
+      return metricsTimeseries;
+    }
+
+    if (fallbackTimeseries.length > 0) {
+      if (metricsTimeseries.length === 0) {
+        return fallbackTimeseries;
+      }
+
+      const fallbackMap = new Map(
+        fallbackTimeseries.map((entry) => [entry.timestamp, entry.providers ?? {}]),
+      );
+
+      const merged = metricsTimeseries.map((point) => ({
+        ...point,
+        providers: fallbackMap.get(point.timestamp) ?? point.providers,
+      }));
+
+      const mergedHasProviders = merged.some(
+        (point) => point.providers && Object.keys(point.providers).length > 0,
+      );
+
+      return mergedHasProviders ? merged : fallbackTimeseries;
+    }
+
+    return metricsTimeseries;
+  }, [metrics.data?.timeseries, fallbackTimeseries]);
+
+  return {
+    filters,
+    metrics,
+    health,
+    payments,
+    paymentsLoading,
+    paymentsError,
+    page,
+    pageSize,
+    totalPayments,
+    setPage,
+    reload,
+    statusCounts: derivedStatusCounts,
+    providerCounts: derivedProviderCounts,
+    totalsByCurrency,
+    providerAmounts,
+    providerPaymentDetails,
+    timeseries: timeseriesWithProviders,
+  };
+};
