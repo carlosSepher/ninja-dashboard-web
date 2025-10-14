@@ -111,8 +111,20 @@ const baseURL = USE_MSW ? undefined : API_BASE_URL;
 
 interface PaginatedApiResponse<T> {
   items: T[];
-  count: number;
-  next_offset: number | null;
+  count?: number;
+  total?: number;
+  total_count?: number;
+  totalCount?: number;
+  next_offset?: number | null;
+  nextOffset?: number | null;
+  meta?: {
+    count?: number;
+    total?: number;
+    total_count?: number;
+    totalCount?: number;
+    next_offset?: number | null;
+    nextOffset?: number | null;
+  };
 }
 
 interface LegacyPaginatedApiResponse<T> {
@@ -1555,6 +1567,10 @@ class ApiClient {
     const offset = Math.max(0, (page - 1) * pageSize);
     return this.cleanQuery({
       limit: pageSize,
+      page,
+      page_size: pageSize,
+      pageSize,
+      per_page: pageSize,
       offset,
       created_from: from,
       created_to: to,
@@ -1577,10 +1593,33 @@ class ApiClient {
   private normalizePaginated<T>(data: AnyPaginatedResponse<T>): PaginatedApiResponse<T> {
     if (data && Array.isArray((data as PaginatedApiResponse<T>).items)) {
       const modern = data as PaginatedApiResponse<T>;
+      const resolveFirstNumber = (...candidates: Array<number | null | undefined>) =>
+        candidates.find(
+          (value): value is number => typeof value === "number" && Number.isFinite(value),
+        );
+      const meta = modern.meta ?? (modern as { meta?: PaginatedApiResponse<T>["meta"] }).meta;
+      const total =
+        resolveFirstNumber(
+          modern.count,
+          modern.total,
+          modern.total_count,
+          modern.totalCount,
+          meta?.count,
+          meta?.total,
+          meta?.total_count,
+          meta?.totalCount,
+        ) ?? modern.items.length;
+      const nextOffsetCandidate =
+        [
+          modern.next_offset,
+          modern.nextOffset,
+          meta?.next_offset,
+          meta?.nextOffset,
+        ].find((value) => value !== undefined) ?? null;
       return {
         items: modern.items,
-        count: modern.count ?? modern.items.length,
-        next_offset: modern.next_offset ?? null,
+        count: Math.max(total, 0),
+        next_offset: nextOffsetCandidate,
       };
     }
 
