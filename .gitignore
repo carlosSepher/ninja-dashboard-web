@@ -29,3 +29,5 @@ nousar.env.prod
 promp.txt
 schema.sql
 .env
+.vite
+deploy_dashboard.sh

@@ -304,39 +304,34 @@ const normalizeAmountToMinorUnits = (
 
   const normalizedCurrency = (currency ?? "CLP").trim().toUpperCase();
   const factor = getCurrencyMinorFactor(normalizedCurrency);
-  const baseValue = Math.round(numericValue);
 
-  if (factor === 1 || USE_MSW) {
-    return baseValue;
+  if (USE_MSW) {
+    return Math.round(numericValue);
   }
+
+  if (factor === 1) {
+    return Math.round(numericValue);
+  }
+
+  const scaledFromRaw = Math.round(numericValue * factor);
 
   const candidates = options.majorCandidates
     ?.map((candidate) => Number(candidate))
-    .filter((candidate) => Number.isFinite(candidate) && Math.abs(candidate as number) > 0);
+    .filter((candidate) => Number.isFinite(candidate) && Math.abs(candidate as number) > 0)
+    .map((candidate) => Math.round(candidate * factor));
 
   if (candidates && candidates.length > 0) {
-    const candidate = candidates.find((candidateValue) => Math.abs(candidateValue) >= 1);
+    const candidate = candidates.find((candidateValue) => Math.abs(candidateValue) >= Math.abs(scaledFromRaw));
     if (candidate !== undefined) {
-      const scaled = candidate * factor;
-      const scaledRounded = Math.round(scaled);
-      if (Math.abs(scaledRounded) >= Math.abs(baseValue)) {
-        return scaledRounded;
-      }
+      return candidate;
     }
   }
 
   if (!shouldNormalizeCurrency(normalizedCurrency, options.provider)) {
-    return baseValue;
+    return scaledFromRaw;
   }
 
-  const remainder = Math.abs(baseValue) % factor;
-  if (Math.abs(baseValue) >= factor && remainder === 0) {
-    return baseValue;
-  }
-
-  if (Math.abs(baseValue) === 0) return 0;
-
-  return Math.round(baseValue * factor);
+  return scaledFromRaw;
 };
 
 interface PaymentOrderApi {
