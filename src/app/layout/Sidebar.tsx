@@ -9,6 +9,7 @@ const navItems = [
   { to: "/history", label: "State history" },
   { to: "/refunds", label: "Refunds" },
   { to: "/disputes", label: "Disputes" },
+  { to: "/users", label: "Users" },
   { to: "/companies", label: "Companies" },
   { to: "/webhooks", label: "Webhooks" },
   { to: "/status-checks", label: "Status checks" },

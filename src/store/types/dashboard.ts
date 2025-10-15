@@ -34,6 +34,13 @@ export interface Company {
   updatedAt: string | null;
 }
 
+export interface UserAccount {
+  id: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
 export interface Payment {
   id: string;
   paymentOrderId: string;

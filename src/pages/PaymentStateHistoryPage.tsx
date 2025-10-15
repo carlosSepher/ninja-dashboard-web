@@ -114,6 +114,7 @@ export const PaymentStateHistoryPage = () => {
       {
         paymentId: string;
         buyOrder: string | null;
+        provider: string | null;
         latestStatus: string;
         latestAt: string;
         steps: number;
@@ -128,6 +129,7 @@ export const PaymentStateHistoryPage = () => {
         map.set(paymentId, {
           paymentId,
           buyOrder: entry.buyOrder ?? null,
+          provider: entry.provider ?? null,
           latestStatus: entry.toStatus,
           latestAt: eventTimestamp,
           steps: 1,
@@ -140,6 +142,11 @@ export const PaymentStateHistoryPage = () => {
           if (entry.buyOrder) {
             existing.buyOrder = entry.buyOrder;
           }
+          if (entry.provider) {
+            existing.provider = entry.provider;
+          }
+        } else if (!existing.provider && entry.provider) {
+          existing.provider = entry.provider;
         }
       }
     });
@@ -277,6 +284,10 @@ export const PaymentStateHistoryPage = () => {
                         <div className="mt-1 text-xs text-muted-foreground">
                           <span className="font-semibold text-foreground">Buy order:</span>{" "}
                           <span className="font-semibold text-foreground">{summary.buyOrder ?? "—"}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">PSP:</span>{" "}
+                          <span className="font-semibold text-foreground">{summary.provider ?? "—"}</span>
                         </div>
                       </button>
                     );

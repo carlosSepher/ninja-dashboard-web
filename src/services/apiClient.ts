@@ -19,6 +19,7 @@ import type {
   StatusCheckEntry,
   StreamEvent,
   TimeseriesPoint,
+  UserAccount,
   WebhookInboxEntry,
 } from "@/store/types/dashboard";
 
@@ -53,6 +54,12 @@ export interface CompaniesQueryParams {
   active?: boolean | null;
 }
 
+export interface UsersQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string | null;
+}
+
 export interface CompanyCreateInput {
   name: string;
   contactEmail: string;
@@ -67,6 +74,16 @@ export interface CompanyUpdateInput {
   apiToken?: string;
   active?: boolean;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface UserCreateInput {
+  email: string;
+  password: string;
+}
+
+export interface UserUpdateInput {
+  email?: string;
+  password?: string;
 }
 
 export interface RefundPaymentInput {
@@ -462,6 +479,17 @@ type WebhookInboxApiLike = WebhookInboxApi & {
   eventType?: string | null;
 };
 
+interface UserAccountApi {
+  id: string | number;
+  email: string;
+  created_at?: string | null;
+  createdAt?: string | null;
+  updated_at?: string | null;
+  updatedAt?: string | null;
+}
+
+type UserAccountApiLike = UserAccountApi;
+
 interface CompanyApi {
   id: string | number;
   name: string;
@@ -695,6 +723,60 @@ class ApiClient {
     });
     const normalized = this.normalizePaginated(response.data);
     return this.toPaginatedResult(normalized, (item) => this.mapWebhook(item));
+  }
+
+  public async listUsers(params: UsersQueryParams = {}): Promise<PaginatedResult<UserAccount>> {
+    const { page = 1, pageSize = 25, search } = params;
+    const filters: Record<string, unknown> = {};
+    if (typeof search === "string" && search.trim().length > 0) {
+      filters.search = search.trim();
+    }
+    const response = await this.client.get<UserAccountApi[] | AnyPaginatedResponse<UserAccountApi>>("/users", {
+      params: this.buildPaginatedQuery({ page, pageSize }, filters),
+    });
+
+    const data = response.data;
+    if (Array.isArray(data)) {
+      const start = Math.max(0, (page - 1) * pageSize);
+      const slice = data.slice(start, start + pageSize).map((item) => this.mapUserAccount(item));
+      return {
+        items: slice,
+        count: data.length,
+        nextOffset: null,
+      };
+    }
+
+    const normalized = this.normalizePaginated(data);
+    return this.toPaginatedResult(normalized, (item) => this.mapUserAccount(item));
+  }
+
+  public async getUser(id: string): Promise<UserAccount> {
+    const { data } = await this.client.get<UserAccountApi | { data: UserAccountApi }>(`/users/${id}`);
+    const payload = this.unwrapData(data);
+    return this.mapUserAccount(payload);
+  }
+
+  public async createUser(payload: UserCreateInput): Promise<UserAccount> {
+    const body = {
+      email: payload.email,
+      password: payload.password,
+    };
+    const { data } = await this.client.post<UserAccountApi | { data: UserAccountApi }>("/users", body);
+    const result = this.unwrapData(data);
+    return this.mapUserAccount(result);
+  }
+
+  public async updateUser(id: string, payload: UserUpdateInput): Promise<UserAccount> {
+    const body: Record<string, unknown> = {};
+    if (payload.email !== undefined) body.email = payload.email;
+    if (payload.password !== undefined) body.password = payload.password;
+    const { data } = await this.client.patch<UserAccountApi | { data: UserAccountApi }>(`/users/${id}`, body);
+    const result = this.unwrapData(data);
+    return this.mapUserAccount(result);
+  }
+
+  public async deleteUser(id: string): Promise<void> {
+    await this.client.delete(`/users/${id}`);
   }
 
   public async listCompanies(params: CompaniesQueryParams = {}): Promise<PaginatedResult<Company>> {
@@ -1132,6 +1214,19 @@ class ApiClient {
       verificationStatus: (raw.verification_status ?? raw.verificationStatus ?? "pending") as WebhookInboxEntry["verificationStatus"],
       paymentId,
       receivedAt: raw.received_at ?? raw.receivedAt ?? new Date().toISOString(),
+    };
+  }
+
+  private mapUserAccount(item: UserAccountApi): UserAccount {
+    const raw = item as UserAccountApiLike;
+    const normalizedEmail =
+      typeof raw.email === "string" ? raw.email.trim() : String(raw.email ?? "");
+    const fallbackEmail = normalizedEmail || `user-${String(raw.id)}`;
+    return {
+      id: String(raw.id),
+      email: fallbackEmail,
+      createdAt: raw.created_at ?? raw.createdAt ?? new Date().toISOString(),
+      updatedAt: raw.updated_at ?? raw.updatedAt ?? null,
     };
   }
 

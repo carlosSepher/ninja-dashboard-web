@@ -20,6 +20,7 @@ import { CompaniesPage } from "@/pages/CompaniesPage";
 import { StatusChecksPage } from "@/pages/StatusChecksPage";
 import { CrmPushQueuePage } from "@/pages/CrmPushQueuePage";
 import { CrmEventLogsPage } from "@/pages/CrmEventLogsPage";
+import { UsersPage } from "@/pages/UsersPage";
 import { useDashboardData } from "@/features/dashboard/useDashboardData";
 // import { isFeatureEnabled } from "@/lib/logger";
 import { useDashboardStore } from "@/store";
@@ -79,6 +80,11 @@ const getFilterConfig = (pathname: string): FiltersConfig => {
       fields: ["dateRange", "provider", "paymentId"],
       paymentLabel: "Payment ID",
       paymentPlaceholder: "pay-123",
+    };
+  }
+  if (pathname.startsWith("/users")) {
+    return {
+      fields: [],
     };
   }
   if (pathname.startsWith("/companies")) {
@@ -292,6 +298,7 @@ const AppContent = () => {
             <Route path="/refunds" element={<RefundsPage />} />
             <Route path="/disputes" element={<DisputesPage />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
+            <Route path="/users" element={<UsersPage />} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/status-checks" element={<StatusChecksPage />} />
             <Route path="/crm/push-queue" element={<CrmPushQueuePage />} />
