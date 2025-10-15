@@ -21,7 +21,7 @@ import { StatusChecksPage } from "@/pages/StatusChecksPage";
 import { CrmPushQueuePage } from "@/pages/CrmPushQueuePage";
 import { CrmEventLogsPage } from "@/pages/CrmEventLogsPage";
 import { useDashboardData } from "@/features/dashboard/useDashboardData";
-import { isFeatureEnabled } from "@/lib/logger";
+// import { isFeatureEnabled } from "@/lib/logger";
 import { useDashboardStore } from "@/store";
 import { selectAuthEmail, useAuthStore } from "@/store/auth";
 import type { FiltersState, PaymentStatus, ProviderType } from "@/store/types/dashboard";
@@ -151,13 +151,15 @@ const AppContent = () => {
     timeseries,
   } = useDashboardData();
   const streamEvents = useDashboardStore((state) => state.stream.events);
+  const streamConnected = useDashboardStore((state) => state.stream.connected);
+  const streamError = useDashboardStore((state) => state.stream.lastError);
   const setFilters = useDashboardStore((state) => state.setFilters);
   const resetFilters = useDashboardStore((state) => state.resetFilters);
   const logout = useAuthStore((state) => state.logout);
   const authEmail = useAuthStore(selectAuthEmail);
 
   const filterConfig = useMemo(() => getFilterConfig(location.pathname), [location.pathname]);
-  const exportEnabled = isFeatureEnabled("export-csv", true);
+  // const exportEnabled = isFeatureEnabled("export-csv", true);
 
   const handleChangeFilters = (partial: Partial<FiltersState>) => {
     setFilters(partial);
@@ -172,45 +174,45 @@ const AppContent = () => {
     reload();
   };
 
-  const handleExportCsv = () => {
-    if (!payments.length) return;
-    const header = [
-      "id",
-      "paymentOrderId",
-      "buyOrder",
-      "provider",
-      "status",
-      "amountMinor",
-      "currency",
-      "environment",
-      "providerAccountId",
-      "createdAt",
-      "updatedAt",
-    ];
-    const rows = payments.map((payment) => [
-      payment.id,
-      payment.paymentOrderId,
-      payment.buyOrder,
-      payment.provider,
-      payment.status,
-      payment.amountMinor,
-      payment.currency,
-      payment.environment,
-      payment.providerAccountId ?? "",
-      payment.createdAt,
-      payment.updatedAt,
-    ]);
-    const csvContent = [header, ...rows]
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `transactions-${Date.now()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  // const handleExportCsv = () => {
+  //   if (!payments.length) return;
+  //   const header = [
+  //     "id",
+  //     "paymentOrderId",
+  //     "buyOrder",
+  //     "provider",
+  //     "status",
+  //     "amountMinor",
+  //     "currency",
+  //     "environment",
+  //     "providerAccountId",
+  //     "createdAt",
+  //     "updatedAt",
+  //   ];
+  //   const rows = payments.map((payment) => [
+  //     payment.id,
+  //     payment.paymentOrderId,
+  //     payment.buyOrder,
+  //     payment.provider,
+  //     payment.status,
+  //     payment.amountMinor,
+  //     payment.currency,
+  //     payment.environment,
+  //     payment.providerAccountId ?? "",
+  //     payment.createdAt,
+  //     payment.updatedAt,
+  //   ]);
+  //   const csvContent = [header, ...rows]
+  //     .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
+  //     .join("\n");
+  //   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  //   const url = URL.createObjectURL(blob);
+  //   const link = document.createElement("a");
+  //   link.href = url;
+  //   link.download = `transactions-${Date.now()}.csv`;
+  //   link.click();
+  //   URL.revokeObjectURL(url);
+  // };
 
   const { provider, buyOrder, paymentId, status } = filters;
 
@@ -247,10 +249,8 @@ const AppContent = () => {
           onChangeFilters={handleChangeFilters}
           onApplyFilters={handleApplyFilters}
           onResetFilters={handleResetFilters}
-          onExportCsv={handleExportCsv}
           providers={providerOptions}
           statuses={paymentStatusOptions as PaymentStatus[]}
-          exportEnabled={exportEnabled}
           filterConfig={filterConfig}
           onLogout={logout}
           userEmail={authEmail}
@@ -305,6 +305,8 @@ const AppContent = () => {
                   healthError={health.error}
                   streamEvents={streamEvents}
                   eventsLoading={metrics.loading}
+                  streamConnected={streamConnected}
+                  streamError={streamError}
                 />
               }
             />

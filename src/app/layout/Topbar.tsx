@@ -1,4 +1,4 @@
-import { Download, LogOut, RotateCw } from "lucide-react";
+import { LogOut, RotateCw } from "lucide-react";
 
 import { FiltersBar, type FilterField } from "@/components/filters/FiltersBar";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,8 @@ interface TopbarProps {
   onChangeFilters: (filters: Partial<FiltersState>) => void;
   onApplyFilters: () => void;
   onResetFilters: () => void;
-  onExportCsv: () => void;
   providers: ProviderType[];
   statuses: PaymentStatus[];
-  exportEnabled?: boolean;
   filterConfig: FiltersConfig;
   onLogout?: () => void;
   userEmail?: string | null;
@@ -34,10 +32,8 @@ export const Topbar = ({
   onChangeFilters,
   onApplyFilters,
   onResetFilters,
-  onExportCsv,
   providers,
   statuses,
-  exportEnabled = true,
   filterConfig,
   onLogout,
   userEmail,
@@ -61,15 +57,6 @@ export const Topbar = ({
           <Button variant="outline" onClick={onApplyFilters} className="flex items-center gap-2">
             <RotateCw className="h-4 w-4" />
             Refresh
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={onExportCsv}
-            className="flex items-center gap-2"
-            disabled={!exportEnabled}
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
           </Button>
           <ThemeToggle />
         </div>
