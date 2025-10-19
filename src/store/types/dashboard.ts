@@ -65,6 +65,7 @@ export interface Payment {
 export interface PaymentOrder {
   id: string;
   buyOrder: string;
+  paymentId?: string | null;
   environment: EnvironmentType;
   currency: string;
   amountExpectedMinor: number;

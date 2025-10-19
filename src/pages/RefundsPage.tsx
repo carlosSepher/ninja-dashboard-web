@@ -11,10 +11,12 @@ const PAGE_SIZE = 25;
 export const RefundsPage = () => {
   const filters = useDashboardStore((state) => state.filters);
   const [items, setItems] = useState<Refund[]>([]);
+  const [sourceItems, setSourceItems] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [sourceTotal, setSourceTotal] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -29,6 +31,8 @@ export const RefundsPage = () => {
         page,
         pageSize: PAGE_SIZE,
       });
+      setSourceItems(response.items);
+      setSourceTotal(response.count);
       setItems(response.items);
       setTotal(response.count);
     } catch (err) {
@@ -36,15 +40,43 @@ export const RefundsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters.buyOrder, filters.dateRange.from, filters.dateRange.to, filters.provider, filters.status, page]);
+  }, [
+    filters.buyOrder,
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.provider,
+    filters.status,
+    page,
+  ]);
 
   useEffect(() => {
     setPage(1);
-  }, [filters.dateRange.from, filters.dateRange.to, filters.provider, filters.status, filters.buyOrder]);
+  }, [
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.provider,
+    filters.status,
+    filters.buyOrder,
+  ]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const normalizedPaymentId = filters.paymentId.trim().toLowerCase();
+    if (normalizedPaymentId) {
+      const filteredItems = sourceItems.filter((item) =>
+        item.paymentId?.toLowerCase().includes(normalizedPaymentId),
+      );
+      setItems(filteredItems);
+      setTotal(filteredItems.length);
+      return;
+    }
+
+    setItems(sourceItems);
+    setTotal(sourceTotal);
+  }, [filters.paymentId, sourceItems, sourceTotal]);
 
   const columns: PaginatedColumn<Refund>[] = [
     { header: "Refund ID", render: (item) => item.id },

@@ -256,18 +256,16 @@ export const UsersPage = () => {
         total={total}
         onPageChange={(nextPage) => setPage(nextPage)}
         emptyMessage="No users found"
-        footerContent={
-          <Button size="sm" onClick={handleCreateClick} variant="secondary">
-            New user
-          </Button>
-        }
       />
 
       <Card className="col-span-12">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             {formMode === "create" ? "Create user" : "Edit user"}
           </CardTitle>
+          <Button size="sm" variant="secondary" onClick={handleCreateClick} disabled={formDisabled}>
+            Clean
+          </Button>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

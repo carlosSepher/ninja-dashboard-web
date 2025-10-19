@@ -50,27 +50,27 @@ const getFilterConfig = (pathname: string): FiltersConfig => {
   }
   if (pathname.startsWith("/transactions")) {
     return {
-      fields: ["dateRange", "buyOrder", "provider", "status"],
+      fields: ["dateRange", "buyOrder", "paymentId", "provider", "status"],
       statusOptions: paymentStatusOptions,
     };
   }
   if (pathname.startsWith("/orders")) {
     return {
-      fields: ["dateRange", "buyOrder", "provider", "status"],
+      fields: ["dateRange", "buyOrder", "paymentId", "provider", "status"],
       statusOptions: orderStatusOptions,
       statusLabel: "Order status",
     };
   }
   if (pathname.startsWith("/history")) {
     return {
-      fields: ["dateRange", "buyOrder", "provider", "status"],
+      fields: ["dateRange", "buyOrder", "paymentId", "provider", "status"],
       statusOptions: paymentStatusOptions,
       statusLabel: "State",
     };
   }
   if (pathname.startsWith("/refunds")) {
     return {
-      fields: ["dateRange", "buyOrder", "provider", "status"],
+      fields: ["dateRange", "buyOrder", "paymentId", "provider", "status"],
       statusOptions: refundStatusOptions,
       statusLabel: "Refund status",
     };

@@ -14,10 +14,12 @@ const PAGE_SIZE = 50;
 export const PaymentStateHistoryPage = () => {
   const filters = useDashboardStore((state) => state.filters);
   const [items, setItems] = useState<PaymentStateHistoryEntry[]>([]);
+  const [baseItems, setBaseItems] = useState<PaymentStateHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [baseTotal, setBaseTotal] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -89,24 +91,56 @@ export const PaymentStateHistoryPage = () => {
           )
         : statusFiltered;
 
-      setItems(buyOrderFiltered);
       const shouldUseResponseCount =
         filters.provider === "all" && !normalizedBuyOrder && !normalizedStatus;
-      setTotal(shouldUseResponseCount ? response.count : buyOrderFiltered.length);
+      const displayTotal = shouldUseResponseCount ? response.count : buyOrderFiltered.length;
+
+      setBaseItems(buyOrderFiltered);
+      setBaseTotal(displayTotal);
+      setItems(buyOrderFiltered);
+      setTotal(displayTotal);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [filters.buyOrder, filters.dateRange.from, filters.dateRange.to, filters.status, filters.provider, page]);
+  }, [
+    filters.buyOrder,
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.status,
+    filters.provider,
+    page,
+  ]);
 
   useEffect(() => {
     setPage(1);
-  }, [filters.dateRange.from, filters.dateRange.to, filters.status, filters.buyOrder, filters.provider]);
+  }, [
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.status,
+    filters.buyOrder,
+    filters.provider,
+  ]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const normalizedPaymentId = filters.paymentId.trim().toLowerCase();
+    if (normalizedPaymentId) {
+      const filtered = baseItems.filter((entry) =>
+        entry.paymentId?.toLowerCase().includes(normalizedPaymentId),
+      );
+      setItems(filtered);
+      setTotal(filtered.length);
+      return;
+    }
+
+    setItems(baseItems);
+    setTotal(baseTotal);
+  }, [baseItems, baseTotal, filters.paymentId]);
 
   const summaries = useMemo(() => {
     const map = new Map<

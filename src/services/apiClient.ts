@@ -379,6 +379,8 @@ type PaymentOrderApiLike = PaymentOrderApi & {
   amountExpectedMinor?: number;
   createdAt?: string;
   updatedAt?: string;
+  payment_id?: string | number | null;
+  paymentId?: string | number | null;
 };
 
 interface PaymentStateHistoryApi {
@@ -1101,9 +1103,12 @@ class ApiClient {
   private mapPaymentOrder(item: PaymentOrderApi): PaymentOrder {
     const raw = item as PaymentOrderApiLike;
     const currency = raw.currency ?? "CLP";
+    const paymentIdValue = raw.payment_id ?? raw.paymentId ?? null;
     return {
       id: String(raw.id),
       buyOrder: raw.buy_order ?? raw.buyOrder ?? "",
+      paymentId:
+        paymentIdValue === null || paymentIdValue === undefined ? null : String(paymentIdValue),
       environment: (raw.environment ?? "test") as PaymentOrder["environment"],
       currency,
       amountExpectedMinor: normalizeAmountToMinorUnits(

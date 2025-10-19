@@ -24,11 +24,13 @@ export const useDashboardData = () => {
   const setStream = useDashboardStore((state) => state.setStream);
 
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentsSource, setPaymentsSource] = useState<Payment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [totalPayments, setTotalPayments] = useState(0);
+  const [paymentsSourceTotal, setPaymentsSourceTotal] = useState(0);
   const deliveredEventsRef = useRef<Set<string>>(new Set());
 
   const loadMetrics = useCallback(async () => {
@@ -74,15 +76,8 @@ export const useDashboardData = () => {
         page,
         pageSize,
       });
-      const normalizedBuyOrder = filters.buyOrder.trim().toLowerCase();
-      const filteredItems = normalizedBuyOrder
-        ? response.items.filter((item) =>
-            item.buyOrder?.toLowerCase().includes(normalizedBuyOrder),
-          )
-        : response.items;
-
-      setPayments(filteredItems);
-      setTotalPayments(normalizedBuyOrder ? filteredItems.length : response.count);
+      setPaymentsSource(response.items);
+      setPaymentsSourceTotal(response.count);
       logInfo("payments refresh", { page, pageSize, total: response.count });
     } catch (error) {
       const message = (error as Error).message;
@@ -91,7 +86,16 @@ export const useDashboardData = () => {
     } finally {
       setPaymentsLoading(false);
     }
-  }, [filters.buyOrder, filters.dateRange.from, filters.dateRange.to, filters.environment, filters.provider, filters.status, page, pageSize]);
+  }, [
+    filters.buyOrder,
+    filters.dateRange.from,
+    filters.dateRange.to,
+    filters.environment,
+    filters.provider,
+    filters.status,
+    page,
+    pageSize,
+  ]);
 
   useEffect(() => {
     loadMetrics();
@@ -129,6 +133,29 @@ export const useDashboardData = () => {
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+
+  useEffect(() => {
+    const trimmedBuyOrder = filters.buyOrder.trim();
+    const trimmedPaymentId = filters.paymentId.trim();
+    const normalizedBuyOrder = trimmedBuyOrder.toLowerCase();
+    const normalizedPaymentId = trimmedPaymentId.toLowerCase();
+    const shouldFilter = Boolean(trimmedBuyOrder || trimmedPaymentId);
+
+    const filteredItems = shouldFilter
+      ? paymentsSource.filter((item) => {
+          const matchesBuyOrder = trimmedBuyOrder
+            ? item.buyOrder.toLowerCase().includes(normalizedBuyOrder)
+            : true;
+          const matchesPaymentId = trimmedPaymentId
+            ? item.id.toLowerCase().includes(normalizedPaymentId)
+            : true;
+          return matchesBuyOrder && matchesPaymentId;
+        })
+      : paymentsSource;
+
+    setPayments(filteredItems);
+    setTotalPayments(shouldFilter ? filteredItems.length : paymentsSourceTotal);
+  }, [filters.buyOrder, filters.paymentId, paymentsSource, paymentsSourceTotal]);
 
   const reload = useCallback(() => {
     loadMetrics();
