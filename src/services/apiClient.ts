@@ -1836,7 +1836,20 @@ class ApiClient {
       },
       service: {
         environment: (serviceInfo.environment as string | null | undefined) ?? null,
-        version: (serviceInfo.version as string | null | undefined) ?? null,
+        version:
+          this.pickFirstNonEmptyString(serviceInfo, [
+            "version",
+            "revision",
+            "commit",
+            "git_commit",
+            "gitCommit",
+            "git_sha",
+            "gitSha",
+            "release",
+            "build",
+            "build_sha",
+            "buildSha",
+          ]) ?? null,
         host: (serviceInfo.host as string | null | undefined) ?? null,
         pid: serviceInfo.pid !== undefined && serviceInfo.pid !== null ? Number(serviceInfo.pid) : null,
         defaultProvider: (serviceInfo.default_provider as string | null | undefined) ??
@@ -1845,6 +1858,31 @@ class ApiClient {
       },
       payments: this.normalizePaymentsMetrics(paymentsInfo as Record<string, unknown>),
     };
+  }
+
+  private pickFirstNonEmptyString(
+    source: Record<string, unknown> | null | undefined,
+    keys: string[],
+  ): string | null {
+    if (!source) return null;
+    for (const key of keys) {
+      const value = source[key];
+      if (value === undefined || value === null) continue;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+        continue;
+      }
+      if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+        const stringified = String(value).trim();
+        if (stringified.length > 0) {
+          return stringified;
+        }
+      }
+    }
+    return null;
   }
 
   private mapHealthStatus(status: string): "operational" | "degraded" | "down" {
