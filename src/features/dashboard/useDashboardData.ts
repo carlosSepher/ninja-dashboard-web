@@ -30,7 +30,6 @@ export const useDashboardData = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [totalPayments, setTotalPayments] = useState(0);
-  const [paymentsSourceTotal, setPaymentsSourceTotal] = useState(0);
   const deliveredEventsRef = useRef<Set<string>>(new Set());
 
   const loadMetrics = useCallback(async () => {
@@ -113,7 +112,6 @@ export const useDashboardData = () => {
       const resolvedTotal = totalCount !== null ? Math.max(totalCount, aggregated.length) : aggregated.length;
 
       setPaymentsSource(aggregated);
-      setPaymentsSourceTotal(resolvedTotal);
       logInfo("payments refresh", { fetched: aggregated.length, total: resolvedTotal, pages: currentPage });
     } catch (error) {
       const message = (error as Error).message;
