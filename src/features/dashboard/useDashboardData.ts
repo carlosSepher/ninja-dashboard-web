@@ -66,19 +66,55 @@ export const useDashboardData = () => {
     try {
       setPaymentsLoading(true);
       setPaymentsError(null);
-      const response = await apiClient.getPayments({
-        from: filters.dateRange.from,
-        to: filters.dateRange.to,
-        provider: filters.provider === "all" ? undefined : filters.provider,
-        status: filters.status === "all" ? undefined : filters.status,
-        environment: filters.environment === "all" ? undefined : filters.environment,
-        buyOrder: filters.buyOrder.trim() ? filters.buyOrder.trim() : undefined,
-        page,
-        pageSize,
-      });
-      setPaymentsSource(response.items);
-      setPaymentsSourceTotal(response.count);
-      logInfo("payments refresh", { page, pageSize, total: response.count });
+
+      const aggregated: Payment[] = [];
+      let totalCount: number | null = null;
+      let currentPage = 1;
+      const requestPageSize = 25;
+      let safetyCounter = 0;
+
+      while (true) {
+        const response = await apiClient.getPayments({
+          from: filters.dateRange.from,
+          to: filters.dateRange.to,
+          provider: filters.provider === "all" ? undefined : filters.provider,
+          status: filters.status === "all" ? undefined : filters.status,
+          environment: filters.environment === "all" ? undefined : filters.environment,
+          buyOrder: filters.buyOrder.trim() ? filters.buyOrder.trim() : undefined,
+          page: currentPage,
+          pageSize: requestPageSize,
+        });
+
+        if (typeof response.count === "number" && Number.isFinite(response.count)) {
+          totalCount = Math.max(totalCount ?? 0, response.count);
+        }
+
+        if (response.items.length === 0) {
+          break;
+        }
+
+        aggregated.push(...response.items);
+
+        const hasNextOffset = response.nextOffset !== null;
+        const hasFullPage = response.items.length === requestPageSize;
+
+        if (!hasNextOffset && !hasFullPage) {
+          break;
+        }
+
+        currentPage += 1;
+        safetyCounter += 1;
+        if (safetyCounter > 200) {
+          logInfo("payments pagination safety stop", { currentPage, aggregated: aggregated.length });
+          break;
+        }
+      }
+
+      const resolvedTotal = totalCount !== null ? Math.max(totalCount, aggregated.length) : aggregated.length;
+
+      setPaymentsSource(aggregated);
+      setPaymentsSourceTotal(resolvedTotal);
+      logInfo("payments refresh", { fetched: aggregated.length, total: resolvedTotal, pages: currentPage });
     } catch (error) {
       const message = (error as Error).message;
       setPaymentsError(message);
@@ -93,8 +129,6 @@ export const useDashboardData = () => {
     filters.environment,
     filters.provider,
     filters.status,
-    page,
-    pageSize,
   ]);
 
   useEffect(() => {
@@ -153,9 +187,23 @@ export const useDashboardData = () => {
         })
       : paymentsSource;
 
-    setPayments(filteredItems);
-    setTotalPayments(shouldFilter ? filteredItems.length : paymentsSourceTotal);
-  }, [filters.buyOrder, filters.paymentId, paymentsSource, paymentsSourceTotal]);
+    const maxPage = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+    if (page > maxPage) {
+      setPage(maxPage);
+      return;
+    }
+
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    setPayments(filteredItems.slice(start, end));
+    setTotalPayments(filteredItems.length);
+  }, [filters.buyOrder, filters.paymentId, page, pageSize, paymentsSource]);
+
+  const authorizedPayments = useMemo(
+    () =>
+      paymentsSource.filter((payment) => (payment.status ?? "").toUpperCase() === "AUTHORIZED"),
+    [paymentsSource],
+  );
 
   const reload = useCallback(() => {
     loadMetrics();
@@ -205,17 +253,17 @@ export const useDashboardData = () => {
     if (metricsCounts && Object.keys(metricsCounts).length > 0) {
       return metricsCounts;
     }
-    return payments.reduce<Record<string, number>>((acc, payment) => {
+    return paymentsSource.reduce<Record<string, number>>((acc, payment) => {
       acc[payment.status] = (acc[payment.status] ?? 0) + 1;
       return acc;
     }, {});
-  }, [metrics.data?.statusCounts, payments]);
+  }, [metrics.data?.statusCounts, paymentsSource]);
 
   const derivedProviderCounts = useMemo(() => {
     let baseCounts: Record<string, number> = {};
 
-    if (payments.length > 0) {
-      baseCounts = payments.reduce<Record<string, number>>((acc, payment) => {
+    if (paymentsSource.length > 0) {
+      baseCounts = paymentsSource.reduce<Record<string, number>>((acc, payment) => {
         acc[payment.provider] = (acc[payment.provider] ?? 0) + 1;
         return acc;
       }, {});
@@ -230,13 +278,13 @@ export const useDashboardData = () => {
     }
 
     return baseCounts;
-  }, [metrics.data?.providerCounts, payments]);
+  }, [metrics.data?.providerCounts, paymentsSource]);
 
   const providerAmounts = useMemo(() => {
     let baseAmounts: Record<string, number> = {};
 
-    if (payments.length > 0) {
-      baseAmounts = payments.reduce<Record<string, number>>((acc, payment) => {
+    if (authorizedPayments.length > 0) {
+      baseAmounts = authorizedPayments.reduce<Record<string, number>>((acc, payment) => {
         acc[payment.provider] = (acc[payment.provider] ?? 0) + payment.amountMinor;
         return acc;
       }, {});
@@ -254,30 +302,33 @@ export const useDashboardData = () => {
     }
 
     return baseAmounts;
-  }, [metrics.data?.pspDistribution, payments]);
+  }, [authorizedPayments, metrics.data?.pspDistribution]);
 
   const providerPaymentDetails = useMemo(() => {
-    return payments.reduce<Record<string, { id: string; amountMinor: number; currency: string }[]>>((acc, payment) => {
-      if (!acc[payment.provider]) {
-        acc[payment.provider] = [];
-      }
+    return authorizedPayments.reduce<Record<string, { id: string; amountMinor: number; currency: string }[]>>(
+      (acc, payment) => {
+        if (!acc[payment.provider]) {
+          acc[payment.provider] = [];
+        }
 
-      const mappedPayment = {
-        id: String(payment.id),
-        amountMinor: payment.amountMinor,
-        currency: payment.currency,
-      };
+        const mappedPayment = {
+          id: String(payment.id),
+          amountMinor: payment.amountMinor,
+          currency: payment.currency,
+        };
 
-      acc[payment.provider].push(mappedPayment);
-      return acc;
-    }, {});
-  }, [payments]);
+        acc[payment.provider].push(mappedPayment);
+        return acc;
+      },
+      {},
+    );
+  }, [authorizedPayments]);
 
   const totalsByCurrency = useMemo(() => {
     let entries: { currency: string; amountMinor: number; providers?: Record<string, number> }[] = [];
 
-    if (payments.length > 0) {
-      const aggregates = payments.reduce<
+    if (authorizedPayments.length > 0) {
+      const aggregates = authorizedPayments.reduce<
         Record<
           string,
           {
@@ -356,7 +407,7 @@ export const useDashboardData = () => {
 
     return entries;
   }, [
-    payments,
+    authorizedPayments,
     metrics.data?.totalsByCurrency,
     metrics.data?.totalAmountCurrency,
     metrics.data?.totalAmountMinor,
@@ -364,7 +415,7 @@ export const useDashboardData = () => {
   ]);
 
   const fallbackTimeseries = useMemo(() => {
-    if (payments.length === 0) return [] as TimeseriesPoint[];
+    if (paymentsSource.length === 0) return [] as TimeseriesPoint[];
 
     const grouped = new Map<
       string,
@@ -377,7 +428,7 @@ export const useDashboardData = () => {
       }
     >();
 
-    payments.forEach((payment) => {
+    paymentsSource.forEach((payment) => {
       const bucket = new Date(payment.createdAt);
       bucket.setMinutes(0, 0, 0);
       const key = bucket.toISOString();
@@ -430,7 +481,7 @@ export const useDashboardData = () => {
           ]),
         ),
       }));
-  }, [payments]);
+  }, [paymentsSource]);
 
   const timeseriesWithProviders = useMemo(() => {
     const metricsTimeseries = metrics.data?.timeseries ?? [];

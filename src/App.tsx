@@ -18,6 +18,7 @@ import { RefundsPage } from "@/pages/RefundsPage";
 import { WebhooksPage } from "@/pages/WebhooksPage";
 import { CompaniesPage } from "@/pages/CompaniesPage";
 import { StatusChecksPage } from "@/pages/StatusChecksPage";
+import { LiquidationsPage } from "@/pages/LiquidationsPage";
 import { CrmPushQueuePage } from "@/pages/CrmPushQueuePage";
 import { CrmEventLogsPage } from "@/pages/CrmEventLogsPage";
 import { UsersPage } from "@/pages/UsersPage";
@@ -83,6 +84,11 @@ const getFilterConfig = (pathname: string): FiltersConfig => {
     };
   }
   if (pathname.startsWith("/users")) {
+    return {
+      fields: [],
+    };
+  }
+  if (pathname.startsWith("/liquidations")) {
     return {
       fields: [],
     };
@@ -300,6 +306,7 @@ const AppContent = () => {
             <Route path="/webhooks" element={<WebhooksPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/companies" element={<CompaniesPage />} />
+            <Route path="/liquidations/*" element={<LiquidationsPage />} />
             <Route path="/status-checks" element={<StatusChecksPage />} />
             <Route path="/crm/push-queue" element={<CrmPushQueuePage />} />
             <Route path="/crm/event-logs" element={<CrmEventLogsPage />} />

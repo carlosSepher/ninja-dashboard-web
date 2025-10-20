@@ -30,6 +30,7 @@ export interface PaymentsQueryParams {
   status?: string | null;
   environment?: string | null;
   buyOrder?: string | null;
+  companyId?: string | number | null;
   page?: number;
   pageSize?: number;
 }
@@ -610,7 +611,7 @@ class ApiClient {
   }
 
   public async getPayments(params: PaymentsQueryParams): Promise<PaginatedResult<Payment>> {
-    const { page = 1, pageSize = 25, from, to, provider, status, environment, buyOrder } = params;
+    const { page = 1, pageSize = 25, from, to, provider, status, environment, buyOrder, companyId } = params;
     const response = await this.client.get<AnyPaginatedResponse<PaymentApi>>("/payments", {
       params: this.buildPaginatedQuery(
         { page, pageSize, from, to },
@@ -619,6 +620,18 @@ class ApiClient {
           status: status ?? undefined,
           environment: environment ?? undefined,
           buy_order: buyOrder ?? undefined,
+          company_id:
+            typeof companyId === "number"
+              ? companyId
+              : typeof companyId === "string" && companyId.trim().length > 0
+                ? companyId
+                : undefined,
+          companyId:
+            typeof companyId === "number"
+              ? companyId
+              : typeof companyId === "string" && companyId.trim().length > 0
+                ? companyId
+                : undefined,
           sort: "created_at",
           order: "desc",
         },
